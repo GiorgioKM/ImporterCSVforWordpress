@@ -72,14 +72,25 @@ class ImporterCSVforWP {
 	private $can_trim_cell = false;
 	
 	/**
+	 * Carattere speciale che delimita i campi di dati.
+	 *
+	 * @dalla v1.0
+	 *
+	 * @accesso privato
+	 * @var     string
+	 */
+	private $column_delimiter = ';';
+	
+	/**
 	 * Costruttore.
 	 *
 	 * @dalla v1.0
 	 *
 	 * @accesso   pubblico
-	 * @parametro string   $filename_csv Obbligatorio. Il nome del file utilizzato per l'importazione dei dati CSV.
+	 * @parametro string   $filename_csv      Obbligatorio. Il nome del file utilizzato per l'importazione dei dati CSV.
+	 * @parametro string   $column_delimiter  Facoltativo.  Carattere speciale che delimita i campi di dati.
 	 */
-	public function __construct($filename_csv = '') {
+	public function __construct($filename_csv = '', $column_delimiter = '') {
 		$this->errors = new WP_Error;
 		
 		if (empty(trim($filename_csv)))
@@ -103,6 +114,9 @@ class ImporterCSVforWP {
 		
 		if ($this->_is_errors())
 			wp_die($this->errors->get_error_message());
+		
+		if (!empty($column_delimiter))
+			$this->column_delimiter = $column_delimiter;
 	}
 	
 	/**
@@ -123,7 +137,7 @@ class ImporterCSVforWP {
 		
 		$this->handle = fopen($this->class_paths['IMPORT_CSV'], 'r');
 		
-		while (($data_row_from_csv = fgetcsv($this->handle, 1000, ';')) !== FALSE) {
+		while (($data_row_from_csv = fgetcsv($this->handle, 1000, $this->column_delimiter)) !== FALSE) {
 			$data_row_from_csv = array_filter(array_merge(array(''), $data_row_from_csv));
 			
 			$this->csv_data[] = $this->_get_single_data_row($args, $data_row_from_csv);
