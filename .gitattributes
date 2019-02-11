@@ -1,0 +1,4 @@
+.gitattributes export-ignore
+_config.yml export-ignore
+dist/*.php linguist-language=PHP
+dist/*.css linguist-language=CSS
