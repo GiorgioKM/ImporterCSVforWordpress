@@ -1,1 +1,20 @@
+/*
+Nome Classe: ICFW - Importer CSV for Wordpress
+Autore: Giorgio Suadoni
+Versione: 1.0
+*/
 
+pre#icfw-debug {
+    padding: 10px;
+    background-color: #333;
+    color: #ccc;
+    margin: 10px;
+}
+pre#icfw-debug:before {
+    content: "DATA DEBUG";
+    display: block;
+    margin: -10px -10px 20px -10px;
+    padding: 10px;
+    font-size: 20px;
+    background-color: #111;
+}
