@@ -10,11 +10,12 @@ pre#icfw-debug {
     color: #ccc;
     margin: 10px;
 }
-pre#icfw-debug:before {
-    content: "DATA DEBUG";
+pre#icfw-debug > h2 {
     display: block;
     margin: -10px -10px 20px -10px;
     padding: 10px;
     font-size: 20px;
     background-color: #111;
+    color: #ddd;
+    text-transform: uppercase;
 }
