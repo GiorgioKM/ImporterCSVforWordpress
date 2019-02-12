@@ -126,9 +126,9 @@ class ImporterCSVforWP {
 	 *
 	 * @accesso   pubblico
 	 * @parametro array    $args      Obbligatorio. Lista di parametri per la definizione di ogni singola colonna.
-	 * @parametro integer  $start_row Facoltativo.  Da quale riga deve partire l'importo dei dati (l'indice di partenza è 0 che è considerato come la 1° riga del file).
+	 * @parametro integer  $start_row Facoltativo.  Da quale riga deve partire l'importo dei dati.
 	 */
-	public function ruleColumns($args = array(), $start_row = 0) {
+	public function ruleColumns($args = array(), $start_row = 1) {
 		if (!is_array($args))
 			$this->errors->add('args_not_defined', 'Il parametro `$args` deve essere definito come array!');
 		
@@ -145,7 +145,7 @@ class ImporterCSVforWP {
 
 		fclose($this->handle);
 		
-		$this->csv_data = array_slice($this->csv_data, $start_row);
+		$this->csv_data = array_slice($this->csv_data, ($start_row - 1));
 		
 		if ($this->_is_errors())
 			wp_die($this->errors->get_error_message());
@@ -236,7 +236,13 @@ class ImporterCSVforWP {
 			 * @parametro array  $single_data[$col_name] Array di valori della singola cella.
 			 * @parametro string $col_name               Nome della colonna.
 			 */
-			$single_data[$col_name] = apply_filters('icfw_filter_cell', $single_data[$col_name], $col_name);
+			$cell_values = (!is_array($single_data[$col_name]) ? array($single_data[$col_name]) : $single_data[$col_name]);
+			$cell_values = apply_filters('icfw_filter_cell', $cell_values, $col_name);
+			
+			if (!is_array($single_data[$col_name]))
+				$single_data[$col_name] = $cell_values[0];
+			else
+				$single_data[$col_name] = $cell_values;
 		}
 		
 		return $single_data;
