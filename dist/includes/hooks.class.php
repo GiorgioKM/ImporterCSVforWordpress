@@ -63,8 +63,8 @@ class IcfwHooks {
 	 *
 	 * @dalla v1.0.1
 	 *
-	 * @parametro array  $cell_values Array di valori della singola cella.
-	 * @parametro string $column_name Nome della colonna.
+	 * @parametro array  $cell_values Ritorna un array con i valori di ogni singola cella.
+	 * @parametro string $column_name Il nome della chiave della colonna mappata inizialmente con il metodo `mapColumns`.
 	 */
 	public function filter_cell($cell_values, $column_name) {
 		return $cell_values;

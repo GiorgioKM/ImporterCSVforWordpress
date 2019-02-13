@@ -3,10 +3,10 @@
 /**
  * ICFW - Importer CSV for Wordpress
  * 
- * È un utility per Wordpress per l'importazione dati da un file in formato CSV.
+ * È un utility per Wordpress per l'importazione dati da un file in formato CSV e successivo salvataggio come post di Wordpress.
  * 
- * @versione                        1.0.1
- * @data ultimo aggiornamento       12 Febbraio 2019
+ * @versione                        1.0.2
+ * @data ultimo aggiornamento       13 Febbraio 2019
  * @data prima versione             11 Febbraio 2019
  * 
  * @autore                          Giorgio Suadoni
@@ -94,6 +94,16 @@ class ImporterCSVforWP {
 	private $rule_columns_csv = [];
 	
 	/**
+	 * Salva il nome dell'opzione per i salvataggi dei dati precedenti.
+	 *
+	 * @dalla v1.0.2
+	 *
+	 * @accesso privato
+	 * @var     string
+	 */
+	private $option_save_previous_data_ids = '';
+	
+	/**
 	 * Costruttore.
 	 *
 	 * @dalla v1.0
@@ -103,14 +113,22 @@ class ImporterCSVforWP {
 	 * @parametro string   $column_delimiter  Facoltativo.  Carattere speciale che delimita i campi di dati.
 	 */
 	public function __construct($filename_csv = '', $column_delimiter = '') {
+		session_start();
+		
 		$this->errors = new WP_Error;
 		
 		if (empty(trim($filename_csv)))
-			$this->errors->add('csv_undefined', 'Il parametro `$filename_csv` non è stato definito!');
+			$this->errors->add('csv_undefined', 'Il parametro `<strong>$filename_csv</strong>` non è stato definito!');
 		
 		$this->class_paths['WWW'] = __DIR__;
 		$this->class_paths['IMPORT_CSV'] = __DIR__ .'/csv';
 		$this->class_paths['INCLUDES'] = __DIR__ .'/includes';
+		$this->class_paths['FILENAME_CSV'] = $filename_csv;
+		
+		if (!empty($column_delimiter))
+			$this->column_delimiter = $column_delimiter;
+		
+		$this->option_save_previous_data_ids = 'icfw_save_import_'. sanitize_title($this->class_paths['FILENAME_CSV']);
 		
 		$path_absolute_class = explode('/', $this->class_paths['WWW']);
 		$path_absolute_wp = explode('/', ABSPATH);
@@ -121,31 +139,79 @@ class ImporterCSVforWP {
 		$this->class_paths['URI'] = $rebuild_uri_path;
 		
 		if (!file_exists($this->class_paths['IMPORT_CSV'] .'/'. $filename_csv))
-			$this->errors->add('csv_not_found', "Il file `{$filename_csv}` non è stato trovato nella cartella `{$this->class_paths['IMPORT_CSV']}`!");
+			$this->errors->add('csv_not_found', "Il file `<strong>{$filename_csv}</strong>` non è stato trovato nella cartella `<strong>{$this->class_paths['IMPORT_CSV']}</strong>`!");
 		
 		$this->class_paths['IMPORT_CSV'] .= '/'. $filename_csv;
 		
+		$get_previous_data_ids = get_option($this->option_save_previous_data_ids);
+		
+		if ($_GET['cancel'] == 1) {
+			delete_option($this->option_save_previous_data_ids);
+			
+			unset($_SESSION['icfw_force_import']);
+			unset($_SESSION['icfw_continue_import']);
+			
+			header('Location: '. $_SESSION['icfw_script_url']);
+			die;
+		} elseif ($_GET['force'] == 1) {
+			$_SESSION['icfw_force_import'] = 1;
+			unset($_SESSION['icfw_continue_import']);
+			
+			header('Location: '. $_SESSION['icfw_script_url']);
+			die;
+		} elseif ($_GET['continue'] == 1) {
+			$_SESSION['icfw_continue_import'] = 1;
+			unset($_SESSION['icfw_force_import']);
+			
+			header('Location: '. $_SESSION['icfw_script_url']);
+			die;
+		}
+		
+		if ($_SESSION['icfw_force_import'] != 1 && $_SESSION['icfw_continue_import'] != 1) {
+			if (is_array($get_previous_data_ids) && count($get_previous_data_ids)) {
+				$_SESSION['icfw_script_url'] = $_SERVER['REQUEST_URI'];
+				
+				$message_error = "
+				Sono stati trovati dei dati già importati precedentemente per il file `<strong>{$filename_csv}</strong>`!<br>
+				<a href='?cancel=1'>Continua... non sto ancora salvando i dati</a><br>
+				<br>
+				Altrimenti, scegli una delle seguenti opzioni:<br>
+				<ul>
+					<li>
+						<a href='?force=1'>Continua e svuota i dati importati precedentemente</a> (<em>ATTENZIONE: operazione non annullabile!</em>)
+					</li>
+					<li>
+						<a href='?continue=1'>Continua senza svuotare i dati importati precedentemente</a>
+					</li>
+				</ul>
+				";
+				
+				$this->errors->add('previous_data_found', $message_error);
+			}
+			
+			if ($this->_is_errors())
+				wp_die($this->errors->get_error_message());
+		}
+		
 		if ($this->_is_errors())
 			wp_die($this->errors->get_error_message());
-		
-		if (!empty($column_delimiter))
-			$this->column_delimiter = $column_delimiter;
 		
 		require_once($this->class_paths['INCLUDES'] .'/hooks.class.php');
 	}
 	
 	/**
-	 * Definisce i dati da importare per ogni colonna del file CSV.
+	 * Definisce la mappatura delle colonne del file CSV.
 	 *
+	 * @dalla v1.0.2 - Rinominato metodo `ruleColumns` in `mapColumns`.
 	 * @dalla v1.0
 	 *
 	 * @accesso   pubblico
-	 * @parametro array    $args      Obbligatorio. Lista di parametri per la definizione di ogni singola colonna.
-	 * @parametro integer  $start_row Facoltativo.  Da quale riga deve partire l'importo dei dati.
+	 * @parametro array    $args      Obbligatorio. Lista di parametri da definire per mappare ogni singola colonna.
+	 * @parametro integer  $start_row Facoltativo.  Il numero di riga da dove iniziare l'importo dei dati dal file CSV.
 	 */
-	public function ruleColumns($args = array(), $start_row = 1) {
+	public function mapColumns($args = array(), $start_row = 1) {
 		if (!is_array($args))
-			$this->errors->add('args_not_defined', 'Il parametro `$args` deve essere definito come array!');
+			$this->errors->add('args_not_defined', 'Il parametro `<strong>$args</strong>` deve essere definito come array e deve contenere una lista di chiavi e valori per la mappatura delle colonne del file CSV!');
 		
 		if ($this->_is_errors())
 			wp_die($this->errors->get_error_message());
@@ -209,7 +275,7 @@ class ImporterCSVforWP {
 	 * @accesso pubblico
 	 */
 	public function debugData() {
-		$this->printDebug($this->getData(), 'Dati parsati dal CSV');
+		$this->printDebug($this->getData(), 'Mappatura dati CSV');
 	}
 	
 	/**
@@ -221,10 +287,11 @@ class ImporterCSVforWP {
 	 * @parametro array    $args  {
 	 *     Facoltativo. Una serie di elementi per costruire il post da inserire all'interno di Wordpress.
 	 *
-	 *     @tipo array $wp_insert_post   Array di elementi che compongono un post da inserire. Vedere il metodo nativo di Wordpress `wp_insert_post` (facendo riferimento alla variabile $postarr).
+	 *     @tipo array $wp_insert_post   Array di elementi che compongono un post da inserire.
+	 *                                   Vedere il metodo nativo di Wordpress `wp_insert_post` e in particolare il parametro `$postarr`.
 	 *     @type array $custom_post_meta Array di elementi che permettono di salvare alcuni dati all'interno di custom post meta.
 	 * }
-	 * @parametro bool     $save_to_db Facoltativo. Se il valore è false, stamperà a video un debug sull'operazione da effettuare. I dati non verranno salvati!
+	 * @parametro bool     $save_to_db Facoltativo. Determina o meno se salvare i dati sul database. Se il valore è falso, stamperà a video un debug sull'operazione da effettuare.
 	 */
 	public function saveDataToPost($args = array(), $save_to_db = false) {
 		$get_data = $this->getData();
@@ -252,9 +319,42 @@ class ImporterCSVforWP {
 		$args['wp_insert_post'] = wp_parse_args($args['wp_insert_post'], $default_insert_post);
 		
 		if (!$save_to_db) {
-			$this->printDebug($args, 'ARRAY POST');
+			unset($_SESSION['icfw_force_import']);
+			unset($_SESSION['icfw_continue_import']);
+			
+			$this->printDebug($args, 'Mappatura dati del Post');
 			
 			$debug_operation = [];
+		} else {
+			$import_post_ids = [];
+			
+			// Se l'utente ha scelto di svuotare tutti i dati precedentemente importati
+			$get_previous_data_ids = get_option($this->option_save_previous_data_ids);
+			
+			if ($_SESSION['icfw_force_import'] && is_array($get_previous_data_ids) && count($get_previous_data_ids)) {
+				if (!post_type_exists($args['wp_insert_post']['post_type']))
+					$this->errors->add('post_type_not_found', "Il Post Type `<strong>{$args['wp_insert_post']['post_type']}</strong>` non è stato trovato!");
+				
+				if ($this->_is_errors())
+					wp_die($this->errors->get_error_message());
+				
+				unset($_SESSION['icfw_force_import']);
+				
+				$previous_posts = get_posts(array(
+					'post_type' => $args['wp_insert_post']['post_type'],
+					'posts_per_page' => -1,
+					'post__in' => $get_previous_data_ids,
+				));
+				
+				if (is_array($previous_posts) && count($previous_posts)) {
+					foreach ($previous_posts as $each_post) {
+						wp_delete_post($each_post->ID, true);
+					}
+				}
+			}
+			
+			if ($_SESSION['icfw_continue_import'])
+				unset($_SESSION['icfw_continue_import']);
 		}
 		
 		foreach ($get_data as $data_id => $row) {
@@ -283,8 +383,11 @@ class ImporterCSVforWP {
 			
 			if (!$save_to_db)
 				$debug_operation[$data_id]['post'] = $post;
-			else
+			else {
 				$post_id = wp_insert_post($post);
+				
+				$import_post_ids[] = $post_id;
+			}
 			
 			foreach ($args['custom_post_meta'] as $meta_key_name => $meta_data) {
 				$meta_key_db = $meta_key_name;
@@ -312,9 +415,12 @@ class ImporterCSVforWP {
 		}
 		
 		if (!$save_to_db)
-			$this->printDebug($debug_operation, 'SALVATAGGIO DATI SU POST');
-		else
-			$this->printDebug('Dati CSV importati e salvati correttamente su Wordpress', 'OPERAZIONE COMPLETATA CON SUCCESSO!');
+			$this->printDebug($debug_operation, 'Dati da salvare per il post');
+		else {
+			update_option($this->option_save_previous_data_ids, $import_post_ids);
+			
+			$this->printDebug('<p>Dati CSV importati e salvati correttamente su Wordpress!</p>', 'Operazione completata con successo!');
+		}
 	}
 	
 	/**
